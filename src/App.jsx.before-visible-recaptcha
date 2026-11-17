@@ -1,0 +1,88 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { onAuthStateChanged, signInWithEmailAndPassword, signInWithPhoneNumber, RecaptchaVerifier, signOut } from 'firebase/auth';
+import { collection, addDoc, doc, getDoc, onSnapshot, query, where, updateDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { auth, db } from './firebase';
+import './App.css';
+
+const plates = ['91-060-12','91-363-12','50-80-570','32-177-72','85-370-52','29-947-76','659-40-101'];
+const errorMessage = (e) => ({'auth/invalid-credential':'الإيميل أو كلمة المرور غير صحيحة','permission-denied':'لا توجد صلاحية لتنفيذ العملية','auth/too-many-requests':'محاولات كثيرة، حاول لاحقًا'})[e?.code] || e?.message || 'حدث خطأ';
+export default function App() {
+  const [user,setUser] = useState(undefined), [profile,setProfile] = useState(null), [email,setEmail] = useState(''), [password,setPassword] = useState(''), [error,setError] = useState('');
+  const [trucks,setTrucks] = useState([]), [shifts,setShifts] = useState([]), [workers,setWorkers] = useState([]), [selected,setSelected] = useState(''), [busy,setBusy] = useState(false);
+  const [loginMode,setLoginMode] = useState('phone'), [phone,setPhone] = useState(''), [smsCode,setSmsCode] = useState(''), [verification,setVerification] = useState(null);
+  const recaptchaRef = useRef(null);
+  const [newPlate,setNewPlate] = useState(''), [newWorkerName,setNewWorkerName] = useState(''), [newWorkerUid,setNewWorkerUid] = useState('');
+  useEffect(() => onAuthStateChanged(auth, setUser), []);
+  useEffect(() => { if(!user){setProfile(null);return;} return onSnapshot(doc(db,'users',user.uid),s => {setProfile(s.exists()?s.data():null);setError('');},e=>setError(errorMessage(e))); },[user]);
+  const isAdmin = profile?.role === 'admin';
+  useEffect(()=> {if(!user || !profile)return; const unsub=[];
+    unsub.push(onSnapshot(collection(db,'trucks'),s=>setTrucks(s.docs.map(d=>({id:d.id,...d.data()}))),e=>setError(errorMessage(e))));
+    unsub.push(onSnapshot(isAdmin?collection(db,'shifts'):query(collection(db,'shifts'),where('uid','==',user.uid)),s=>setShifts(s.docs.map(d=>({id:d.id,...d.data()}))),e=>setError(errorMessage(e))));
+    if(isAdmin)unsub.push(onSnapshot(collection(db,'users'),s=>setWorkers(s.docs.map(d=>({id:d.id,...d.data()}))),e=>setError(errorMessage(e))));
+    return ()=>unsub.forEach(fn=>fn());
+  },[user,profile?.role]);
+  const active = useMemo(()=>shifts.find(s=>s.uid===user?.uid && s.status==='active'),[shifts,user]);
+  const run = async (fn)=>{setBusy(true);setError('');try{await fn()}catch(e){setError(errorMessage(e))}finally{setBusy(false)}};
+  const login = e => {e.preventDefault();run(()=>signInWithEmailAndPassword(auth,email,password))};
+  const sendSms = e => {
+    e.preventDefault();
+    run(async () => {
+      const digits = phone.replace(/\D/g, '');
+      const e164 = digits.startsWith('0')
+        ? '+972' + digits.slice(1)
+        : digits.startsWith('972')
+        ? '+' + digits
+        : '+' + digits;
+
+      if (!/^\+972[0-9]{9}$/.test(e164))
+        throw new Error('أدخل رقم هاتف صحيح');
+
+      const host = document.getElementById('sms-recaptcha');
+      if (!host) throw new Error('مكان التحقق غير موجود');
+
+      try { recaptchaRef.current?.clear(); } catch {}
+      recaptchaRef.current = null;
+      host.replaceChildren();
+
+      const mount = document.createElement('div');
+      host.appendChild(mount);
+
+      const verifier = new RecaptchaVerifier(
+        auth, mount, { size: 'invisible' }
+      );
+      recaptchaRef.current = verifier;
+
+      try {
+        const result = await signInWithPhoneNumber(auth, e164, verifier);
+        setVerification(result);
+        setSmsCode('');
+      } catch (err) {
+        try { verifier.clear(); } catch {}
+        recaptchaRef.current = null;
+        mount.remove();
+        throw err;
+      }
+    });
+  };
+
+  const verifySms = e => {e.preventDefault();run(()=>verification.confirm(smsCode.trim()))};
+  const start = ()=>run(async()=>{if(!selected)throw new Error('اختار الشاحنة أولاً'); if(active)throw new Error('عندك دوام مفتوح'); await addDoc(collection(db,'shifts'),{uid:user.uid,workerName:profile.name||user.email,truckId:selected,status:'active',startedAt:serverTimestamp()})});
+  const stop = ()=>run(()=>updateDoc(doc(db,'shifts',active.id),{status:'done',endedAt:serverTimestamp()}));
+  const addTruck = ()=>run(async()=>{const plate=newPlate.trim();if(!plate)throw new Error('اكتب رقم الشاحنة');await setDoc(doc(db,'trucks',plate),{plate,active:true});setNewPlate('')});
+  const addWorker = ()=>run(async()=>{if(!newWorkerUid.trim()||!newWorkerName.trim())throw new Error('أدخل الاسم وUID');await setDoc(doc(db,'users',newWorkerUid.trim()),{name:newWorkerName.trim(),role:'worker'});setNewWorkerName('');setNewWorkerUid('')});
+  const formatDate = v=>v?.toDate?.()?.toLocaleString('ar-IL')||'—';
+  if(user===undefined)return <main className="wrap">جاري التحميل...</main>;
+  if(!user)return <main className="wrap"><section className="panel login" dir="rtl"><h1>🚛 نقليات الصياد</h1><p>تسجيل الدخول إلى النظام</p>
+    <div className="inline"><button className={loginMode==='phone'?'':'secondary'} type="button" onClick={()=>{setLoginMode('phone');setError('')}}>دخول الموظف بالهاتف</button><button className={loginMode==='email'?'':'secondary'} type="button" onClick={()=>{setLoginMode('email');setError('')}}>دخول المدير بالإيميل</button></div>
+    {loginMode==='email'?<form onSubmit={login}><input type="email" placeholder="البريد الإلكتروني" value={email} onChange={e=>setEmail(e.target.value)} required/><input type="password" placeholder="كلمة المرور" value={password} onChange={e=>setPassword(e.target.value)} required/><button disabled={busy}>دخول</button></form>:
+    !verification?<form onSubmit={sendSms}><input type="tel" dir="ltr" placeholder="05XXXXXXXX" value={phone} onChange={e=>setPhone(e.target.value)} required/><button disabled={busy}>إرسال رمز التحقق SMS</button></form>:
+    <form onSubmit={verifySms}><p>أدخل رمز التحقق اللي وصلك برسالة SMS</p><input type="text" inputMode="numeric" dir="ltr" autoComplete="one-time-code" placeholder="رمز التحقق" value={smsCode} onChange={e=>setSmsCode(e.target.value)} required/><button disabled={busy}>تأكيد الدخول</button><button type="button" className="secondary" onClick={()=>{setVerification(null);setSmsCode('');setError('')}}>تغيير الرقم</button></form>}
+    <div id="sms-recaptcha"/><p className="hint">رمز التحقق فقط لتأكيد رقم الهاتف. الموظف الجديد يحتاج تفعيل حسابه من المدير قبل استخدام النظام.</p>{error&&<p className="error">{error}</p>}</section></main>;
+  if(!profile)return <main className="wrap"><section className="panel"><h2>الحساب غير مفعّل</h2><p>تم تسجيل الدخول، لكن لا يوجد ملف صلاحيات لهذا الحساب في users/{user.uid}.</p><p>UID: <code dir="ltr">{user.uid}</code></p><p>يجب على مسؤول Firebase إنشاء مستند المستخدم وتحديد role = admin أو worker.</p><button onClick={()=>signOut(auth)}>خروج</button>{error&&<p className="error">{error}</p>}</section></main>;
+  return <main className="wrap"><header><div><h1>🚛 نقليات الصياد</h1><p>مرحبًا، {profile.name||user.email} · {isAdmin?'مدير':'موظف'}</p></div><button className="secondary" onClick={()=>signOut(auth)}>تسجيل خروج</button></header>{error&&<p className="error">{error}</p>}
+    <div className="stats"><section className="panel"><strong>{trucks.length}</strong><span>شاحنة</span></section>{isAdmin&&<section className="panel"><strong>{workers.filter(w=>w.role==='worker').length}</strong><span>موظف</span></section>}{isAdmin&&<section className="panel"><strong>{shifts.filter(s=>s.status==='active').length}</strong><span>دوام نشط</span></section>}</div>
+    <section className="panel"><h2>الدوام اليومي</h2>{active?<><p>شاحنتك الحالية: <b>{active.truckId}</b></p><button disabled={busy} onClick={stop}>إنهاء الدوام</button></>:<><select value={selected} onChange={e=>setSelected(e.target.value)}><option value="">اختر شاحنة</option>{trucks.filter(t=>t.active!==false).map(t=><option key={t.id} value={t.id}>{t.plate||t.id}</option>)}</select><button disabled={busy||!selected} onClick={start}>بدء الدوام</button></>}</section>
+    {isAdmin&&<><section className="panel"><h2>إدارة الشاحنات</h2><div className="inline"><input placeholder="رقم الشاحنة" value={newPlate} onChange={e=>setNewPlate(e.target.value)}/><button disabled={busy} onClick={addTruck}>إضافة شاحنة</button></div><div className="tags">{trucks.map(t=><span key={t.id}>{t.plate||t.id}</span>)}</div>{trucks.length===0&&<p>لم تُضف شاحنات بعد. الأرقام الأولية المقترحة: {plates.join('، ')}</p>}</section><section className="panel"><h2>إدارة الموظفين</h2><p className="hint">أنشئ حساب الموظف أولًا من Firebase Authentication، ثم انسخ UID الخاص به وأضفه هنا.</p><div className="inline"><input placeholder="اسم الموظف" value={newWorkerName} onChange={e=>setNewWorkerName(e.target.value)}/><input placeholder="UID من Authentication" value={newWorkerUid} onChange={e=>setNewWorkerUid(e.target.value)}/><button disabled={busy} onClick={addWorker}>إضافة موظف</button></div><ul>{workers.map(w=><li key={w.id}>{w.name||w.id} — {w.role==='admin'?'مدير':'موظف'}</li>)}</ul></section></>}
+    {isAdmin&&<section className="panel"><h2>سجل الدوام</h2><div className="tableScroll"><table><thead><tr><th>الموظف</th><th>الشاحنة</th><th>البداية</th><th>النهاية</th><th>الحالة</th></tr></thead><tbody>{shifts.map(s=><tr key={s.id}><td>{s.workerName}</td><td>{s.truckId}</td><td>{formatDate(s.startedAt)}</td><td>{formatDate(s.endedAt)}</td><td>{s.status==='active'?'مفتوح':'مكتمل'}</td></tr>)}</tbody></table></div></section>}
+  </main>;
+}

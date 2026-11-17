@@ -1,0 +1,120 @@
+:root{font-family:system-ui,'Segoe UI',sans-serif;color:#18263b;background:#f3f6fa;font-synthesis:none}*{box-sizing:border-box}body{margin:0;direction:rtl}.wrap{max-width:1100px;margin:auto;padding:24px}header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}h1{margin:0;color:#173c65}h2{margin-top:0;font-size:20px}p{line-height:1.7}.panel{background:white;border:1px solid #e2e8f0;border-radius:16px;padding:20px;margin-bottom:18px;box-shadow:0 3px 12px rgba(18,49,80,.03)}.stats{display:flex;gap:14px;flex-wrap:wrap}.stats .panel{flex:1;min-width:130px;display:flex;flex-direction:column;gap:4px}.stats strong{font-size:32px;color:#1762a0}button{background:#1762a0;color:white;border:0;border-radius:9px;padding:12px 18px;cursor:pointer;font-weight:700}button:disabled{opacity:.5;cursor:default}.secondary{background:#e6edf5;color:#173c65}input,select{font:inherit;border:1px solid #cbd5e1;border-radius:9px;padding:11px;min-width:0}select{margin-left:10px}.inline{display:flex;gap:10px;flex-wrap:wrap}.inline input{flex:1;min-width:180px}.tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.tags span{padding:7px 12px;background:#edf4fb;border-radius:30px}.login{max-width:420px;margin:70px auto}.login form{display:grid;gap:12px}.error{background:#fff0f0;color:#a32020;padding:12px;border-radius:9px}.hint{font-size:14px;color:#5c6b7c}.tableScroll{overflow:auto}table{border-collapse:collapse;width:100%;min-width:600px}th,td{border-bottom:1px solid #e2e8f0;padding:11px;text-align:right}@media(max-width:600px){.wrap{padding:12px}header{align-items:flex-start}header h1{font-size:22px}}
+
+/* Professional PDF report printing */
+@page {
+  size: A4 portrait;
+  margin: 14mm;
+}
+
+@media print {
+  body {
+    background: white !important;
+    direction: rtl;
+    color: #18263b !important;
+    font-size: 11pt;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .report-panel,
+  .report-panel * {
+    visibility: visible !important;
+  }
+
+  .report-panel {
+    position: absolute !important;
+    top: 0;
+    right: 0;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 8px !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+  }
+
+  .report-panel button,
+  .report-panel input,
+  .report-panel select {
+    display: none !important;
+  }
+
+  .report-panel h2 {
+    color: #173c65;
+    font-size: 22pt;
+    border-bottom: 3px solid #ed8b28;
+    padding-bottom: 12px;
+  }
+
+  .report-panel table {
+    width: 100%;
+    min-width: 0 !important;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+
+  .report-panel th {
+    background: #173c65 !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .report-panel th,
+  .report-panel td {
+    border: 1px solid #d5dce5;
+    padding: 8px 5px;
+  }
+
+  .report-panel tr {
+    break-inside: avoid;
+  }
+
+  .report-panel .stats {
+    display: flex;
+    gap: 10px;
+  }
+
+  .report-panel .panel {
+    box-shadow: none;
+    border: 1px solid #d5dce5;
+  }
+}
+
+.report-controls{display:flex;gap:12px;flex-wrap:wrap;margin:15px 0}
+.report-controls label{display:grid;gap:6px;min-width:180px}
+.report-panel h3{color:#173c65;margin-top:24px}
+.report-panel p{line-height:1.7}
+@media print{
+  @page{size:A4 landscape;margin:12mm}
+  body *{visibility:hidden!important}
+  .report-panel,.report-panel *{visibility:visible!important}
+  .report-panel{position:absolute!important;top:0;right:0;width:100%!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important}
+  .report-panel .no-print,.report-controls{display:none!important}
+  .report-panel table{width:100%;min-width:0!important;font-size:9pt}
+  .report-panel th,.report-panel td{padding:6px;border:1px solid #bbb}
+  .report-panel th{background:#173c65!important;color:white!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .report-panel tr{break-inside:avoid}
+}
+
+
+/* Live fleet map */
+.fleet-map {
+  width: 100%;
+  height: min(58vh, 520px);
+  min-height: 300px;
+  border: 1px solid #d5deea;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #e9eef4;
+  z-index: 0;
+}
+.leaflet-container { font-family: system-ui, 'Segoe UI', sans-serif; }
+.report-panel .report-controls { display:flex; gap:12px; flex-wrap:wrap; }
+.report-panel .report-controls label { display:grid; gap:6px; min-width:180px; }
+@media(max-width:600px) {
+  .fleet-map { min-height: 260px; height: 42vh; }
+  .report-controls label { min-width: 100%; }
+}
